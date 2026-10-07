@@ -9,7 +9,7 @@
     <TextView
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="CS536 Smart Glass Receiver"
+        android:text="CS536 Smart Glass AI"
         android:textSize="24sp"
         android:textStyle="bold" />
 
@@ -17,30 +17,40 @@
         android:id="@+id/ipInput"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="12dp"
-        android:hint="Air2 IP Address"
-        android:inputType="text"
-        android:text="192.168.220.132" />
+        android:text="192.168.220.132"
+        android:hint="Air2 IP Address" />
 
     <Button
         android:id="@+id/connectButton"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="Connect to Air2" />
+        android:text="Start AI Detection" />
 
     <TextView
         android:id="@+id/statusText"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:layout_marginTop="8dp"
         android:text="Disconnected"
-        android:textSize="16sp" />
+        android:layout_marginTop="8dp" />
 
-    <WebView
-        android:id="@+id/streamWebView"
+    <FrameLayout
         android:layout_width="match_parent"
         android:layout_height="0dp"
         android:layout_weight="1"
-        android:layout_marginTop="12dp" />
+        android:layout_marginTop="12dp">
+
+        <ImageView
+            android:id="@+id/streamImage"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:background="#000000"
+            android:scaleType="fitXY" />
+
+        <com.example.cs536.OverlayView
+            android:id="@+id/overlayView"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent" />
+
+    </FrameLayout>
 
 </LinearLayout>
