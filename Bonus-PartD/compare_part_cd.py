@@ -2,12 +2,14 @@ import argparse
 import csv
 import math
 from pathlib import Path
-from statistics import mean
+from statistics import mean, stdev
 
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
+
+SCRIPT_DIR = Path(__file__).resolve().parent
 
 COLORS = {"C": "#355C9A", "D": "#008A83"}
 
@@ -17,11 +19,13 @@ def load_runs(folder, pattern, part):
     if not files:
         raise ValueError(f"No files match: {folder / pattern}")
 
-    fields = ["elapsed_ms", "inference_ms"]
+    fields = ["elapsed_ms", "inference_ms", "cumulative_rx_bytes",
+              "cumulative_tx_bytes", "interarrival_ms"]
     fields += (
         ["fetch_ms", "total_ms"]
         if part == "C"
-        else ["processing_ms"]
+        else ["processing_ms", "frame_age_ms", "stream_frame_number",
+              "processed_frame_number", "dropped_frames"]
     )
 
     runs = []
@@ -73,8 +77,32 @@ def load_runs(folder, pattern, part):
                 raise ValueError(f"{path.name}: inconsistent timing values")
 
         duration = elapsed[-1] / 1000
+        for field in ["cumulative_rx_bytes", "cumulative_tx_bytes"]:
+            if any(b[field] < a[field] for a, b in zip(rows, rows[1:])):
+                raise ValueError(f"{path.name}: {field} must not decrease")
+        gaps = [row["interarrival_ms"] for row in good
+                if row["interarrival_ms"] > 0]
+        metrics = {
+            "downlink_mbps": rows[-1]["cumulative_rx_bytes"] * 8 / duration / 1e6,
+            "uplink_mbps": rows[-1]["cumulative_tx_bytes"] * 8 / duration / 1e6,
+            "stalls_per_min": sum(gap > 1000 for gap in gaps) * 60 / duration,
+            "jitter_ms": stdev(gaps) if len(gaps) > 1 else None,
+            "received_frames": None, "processed_frames": len(good),
+            "dropped_frames": None, "dropped_pct": None, "frame_age_ms": None,
+        }
+        if part == "D":
+            received = max(row["stream_frame_number"] for row in rows)
+            dropped = max(row["dropped_frames"] for row in rows)
+            if received <= 0 or dropped > received:
+                raise ValueError(f"{path.name}: invalid received/dropped counters")
+            metrics.update(
+                received_frames=received, dropped_frames=dropped,
+                dropped_pct=dropped / received * 100,
+                frame_age_ms=mean(row["frame_age_ms"] for row in good),
+            )
 
         runs.append({
+            **metrics,
             "name": path.name,
             "part": part,
             "rows": good,
@@ -91,7 +119,7 @@ def save(fig, output, filename, title, note):
         x=0.08, ha="left", y=0.98,
     )
     fig.text(
-        0.08, 0.025, note,
+        0.08, 0.025, "Descriptive only: Part C field-trial provenance unverified.\n" + note,
         fontsize=10, color="#526174", va="bottom",
     )
     fig.tight_layout(rect=[0, 0.1, 1, 0.91])
@@ -304,12 +332,51 @@ def make_plots(groups, output, window):
     )
 
 
+def make_tradeoff_plots(groups, output):
+    parts = ["C", "D"]
+    fig, axes = plt.subplots(1, 3, figsize=(15, 7))
+    for ax, metric, label in zip(axes, ["downlink_mbps", "stalls_per_min", "jitter_ms"],
+                               ["Receiver downlink (Mbps)", "Gaps > 1 s / minute", "Interarrival SD (ms)"]):
+        for index, part in enumerate(parts):
+            values = [run[metric] for run in groups[part] if run[metric] is not None]
+            if values:
+                ax.bar(index, mean(values), color=COLORS[part], alpha=0.7)
+                ax.scatter([index] * len(values), values, color="#182B42", s=25, zorder=3)
+                ax.text(index, max(values), f" {mean(values):.2f}", ha="center", va="bottom")
+        ax.set(xticks=[0, 1], xticklabels=["Part C", "Part D"], ylabel=label, ylim=(0, None))
+        ax.margins(y=0.2)
+        ax.grid(axis="y", alpha=0.4)
+        ax.set_axisbelow(True)
+    save(fig, output, "05_network_tradeoffs.png", "Part C vs Part D | Network and continuity",
+         "Bars: unweighted run means. Dots: runs. RX counters include protocol traffic.\n"
+         "Gaps/jitter use logged positive successful-row interarrival_ms; not packet loss or network-only jitter.")
+
+    fig, axes = plt.subplots(1, 2, figsize=(14, 7))
+    runs = groups["D"]
+    processed = sum(len(run["rows"]) for run in runs)
+    dropped = sum(run["dropped_frames"] for run in runs)
+    received = sum(run["received_frames"] for run in runs)
+    axes[0].bar([0, 1], [processed, dropped], color=[COLORS["D"], "#E9AD55"])
+    axes[0].set(xticks=[0, 1], xticklabels=["Successful AI frames", "Discarded pending frames"], ylabel="Frames (all Part D runs)")
+    axes[0].set_title(f"{dropped / received * 100:.1f}% discarded / {received:,.0f} received (snapshot)")
+    values = [run["frame_age_ms"] for run in runs]
+    axes[1].bar(0, mean(values), color=COLORS["D"], alpha=0.7)
+    axes[1].scatter([0] * len(values), values, color="#182B42", zorder=3)
+    axes[1].set(xticks=[0], xticklabels=["Part D"], ylabel="Mean receipt-to-processing-finish age (ms)", ylim=(0, None))
+    for ax in axes:
+        ax.grid(axis="y", alpha=0.4)
+        ax.set_axisbelow(True)
+    save(fig, output, "06_frame_handling.png", "Part D | Frame handling and age",
+         "Dropped frames are application discards, not network packet loss. C has no equivalent age/drop counters.\n"
+         "Received uses max stream sequence; asynchronous snapshots may not reconcile. Age excludes capture/network transit.")
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument(
-        "--c-input", type=Path, default=Path("../part-c/raw")
+        "--c-input", type=Path, default=SCRIPT_DIR.parent / "Bonus-PartC" / "raw"
     )
-    parser.add_argument("--d-input", type=Path, default=Path("./raw"))
+    parser.add_argument("--d-input", type=Path, default=SCRIPT_DIR / "raw")
     parser.add_argument(
         "--c-pattern", default="hotspot_stationary_*.csv"
     )
@@ -318,7 +385,7 @@ def main():
     )
     parser.add_argument(
         "--output", type=Path,
-        default=Path("./analysis/part_c_vs_d"),
+        default=SCRIPT_DIR / "analysis" / "part_c_vs_d",
     )
     parser.add_argument("--window", type=float, default=5)
     args = parser.parse_args()
@@ -338,6 +405,13 @@ def main():
             print(f"Part {part} | {run['name']} | {run['fps']:.2f} FPS")
 
     make_plots(groups, args.output, args.window)
+    make_tradeoff_plots(groups, args.output)
+    records = [{key: value for key, value in run.items() if key != "rows"}
+               for runs in groups.values() for run in runs]
+    with (args.output / "comparison_runs.csv").open("w", newline="", encoding="utf-8") as stream:
+        writer = csv.DictWriter(stream, fieldnames=list(records[0]))
+        writer.writeheader()
+        writer.writerows(records)
 
 
 if __name__ == "__main__":
