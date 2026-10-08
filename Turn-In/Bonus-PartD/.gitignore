@@ -1,0 +1,23 @@
+# Android Studio
+.gradle/
+.idea/
+**/build/
+local.properties
+
+# Android output
+*.apk
+*.aab
+
+# Generated files
+captures/
+logs/
+
+# OS / VS Code
+.DS_Store
+Thumbs.db
+.vscode/
+
+# Secrets
+*.jks
+*.keystore
+.env

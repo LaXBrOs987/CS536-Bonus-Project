@@ -1,0 +1,5 @@
+scenario,runs,duration_min,successful_frames,failed_frames,failure_rate_pct,effective_fps,payload_mbps,downlink_mbps,uplink_mbps,stalls,stalls_per_min,mean_run_jitter_ms,fetch_mean_ms,ai_mean_ms,total_mean_ms,detection_rate_pct,mean_confidence
+Hotspot stationary,10,28.619,3179,0,0.000,1.851,0.513,0.537,0.012,144,5.032,209.924,181.180,140.582,336.851,100.000,0.699
+Hotspot walking,10,24.912,2822,18,0.634,1.888,0.376,0.395,0.013,90,3.613,326.258,156.055,141.533,312.660,64.918,0.663
+PAL3.0 walking,10,30.617,3955,6,0.151,2.153,0.420,0.442,0.015,44,1.437,157.449,102.894,142.090,260.139,61.416,0.661
+5G walking,10,30.683,3663,6,0.164,1.990,0.394,0.415,0.014,130,4.237,185.226,141.693,141.183,298.025,64.237,0.658
