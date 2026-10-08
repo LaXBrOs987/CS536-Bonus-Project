@@ -18,10 +18,6 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
-    androidResources {
-        noCompress += "tflite"
-    }
-
     buildTypes {
         release {
             optimization {
@@ -37,7 +33,6 @@ android {
 }
 
 dependencies {
-    implementation("com.google.mediapipe:tasks-vision:1.0.0")
     implementation(libs.androidx.activity.ktx)
     implementation(libs.androidx.appcompat)
     implementation(libs.androidx.constraintlayout)
