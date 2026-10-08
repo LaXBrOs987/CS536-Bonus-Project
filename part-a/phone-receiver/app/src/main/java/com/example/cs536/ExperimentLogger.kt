@@ -16,9 +16,9 @@ class ExperimentLogger(
 
     private var currentFile: File? = null
 
+    @Synchronized
     fun start(runName: String) {
 
-        // Close an existing experiment if one is still open.
         stop()
 
         val experimentDirectory =
@@ -56,38 +56,72 @@ class ExperimentLogger(
         experimentStartTime =
             SystemClock.elapsedRealtime()
 
+        /*
+         * Part D CSV
+         *
+         * processed_frame_number:
+         *      Number of frames actually processed by AI.
+         *
+         * stream_frame_number:
+         *      Number of frames received from MJPEG stream.
+         *
+         * dropped_frames:
+         *      Number of older frames intentionally discarded
+         *      because a newer frame arrived before AI could
+         *      process the old one.
+         *
+         * frame_receive_ms:
+         *      Time spent waiting for / reading this JPEG
+         *      from the persistent stream.
+         *
+         * processing_ms:
+         *      Local decode + AI + metric processing time.
+         *
+         * frame_age_ms:
+         *      Time from network receipt of this JPEG until
+         *      AI processing finishes.
+         */
         writer?.println(
             "timestamp_ms," +
                     "elapsed_ms," +
-                    "frame_number," +
+                    "processed_frame_number," +
+                    "stream_frame_number," +
                     "frame_bytes," +
                     "cumulative_rx_bytes," +
                     "cumulative_tx_bytes," +
-                    "fetch_ms," +
+                    "frame_receive_ms," +
                     "inference_ms," +
-                    "total_ms," +
+                    "processing_ms," +
+                    "frame_age_ms," +
                     "interarrival_ms," +
                     "detections," +
                     "avg_confidence," +
                     "success," +
+                    "reconnect_count," +
+                    "dropped_frames," +
                     "error"
         )
 
         writer?.flush()
     }
 
+    @Synchronized
     fun log(
-        frameNumber: Int,
+        processedFrameNumber: Int,
+        streamFrameNumber: Int,
         frameBytes: Int,
         cumulativeRxBytes: Long,
         cumulativeTxBytes: Long,
-        fetchMs: Long,
+        frameReceiveMs: Long,
         inferenceMs: Long,
-        totalMs: Long,
+        processingMs: Long,
+        frameAgeMs: Long,
         interarrivalMs: Long,
         detections: Int,
         avgConfidence: Double,
         success: Boolean,
+        reconnectCount: Int,
+        droppedFrames: Int,
         error: String
     ) {
 
@@ -98,8 +132,6 @@ class ExperimentLogger(
             SystemClock.elapsedRealtime() -
                     experimentStartTime
 
-        // Prevent commas/newlines in an error message
-        // from breaking the CSV format.
         val safeError =
             error
                 .replace(",", ";")
@@ -109,23 +141,28 @@ class ExperimentLogger(
         writer?.println(
             "$timestamp," +
                     "$elapsed," +
-                    "$frameNumber," +
+                    "$processedFrameNumber," +
+                    "$streamFrameNumber," +
                     "$frameBytes," +
                     "$cumulativeRxBytes," +
                     "$cumulativeTxBytes," +
-                    "$fetchMs," +
+                    "$frameReceiveMs," +
                     "$inferenceMs," +
-                    "$totalMs," +
+                    "$processingMs," +
+                    "$frameAgeMs," +
                     "$interarrivalMs," +
                     "$detections," +
                     "$avgConfidence," +
                     "$success," +
+                    "$reconnectCount," +
+                    "$droppedFrames," +
                     safeError
         )
 
         writer?.flush()
     }
 
+    @Synchronized
     fun stop() {
 
         writer?.flush()
