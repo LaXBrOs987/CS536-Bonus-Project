@@ -1,16 +1,27 @@
 package com.example.cs536
 
+import android.content.res.Configuration
 import android.graphics.BitmapFactory
 import android.net.TrafficStats
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
+import android.view.Gravity
+import android.view.View
+import android.view.WindowManager
+import android.widget.FrameLayout
+import android.widget.Toast
 import android.widget.Button
 import android.widget.EditText
 import android.widget.ImageView
 import android.widget.TextView
+import androidx.activity.OnBackPressedCallback
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicReference
@@ -25,8 +36,28 @@ class MainActivity : AppCompatActivity() {
     private lateinit var statusText: TextView
     private lateinit var streamImage: ImageView
     private lateinit var overlayView: OverlayView
+    private lateinit var receiverRoot: FrameLayout
+    private lateinit var captureStage: FrameLayout
+    private lateinit var setupScreen: View
+    private lateinit var setupPanel: View
+    private lateinit var setupHeading: View
+    private lateinit var presentationControls: View
+    private lateinit var presentationNotice: TextView
+    private lateinit var fullscreenButton: Button
+    private lateinit var fillButton: Button
+    private var presentationMode = false
+    private var fillScreen = false
+    private var receivedFirstDisplayFrame = false
+    private var helpShown = false
+    private var hasStreamProblem = false
+    @Volatile private var sessionId = 0L
+    private val hidePresentationControls = Runnable {
+        if (presentationMode) presentationControls.visibility = View.GONE
+    }
 
-    private lateinit var detector: ObjectDetectorHelper
+    // Access only on processingExecutor: GPU setup, detection, and close
+    // must all happen on the same worker thread.
+    private var detector: ObjectDetectorHelper? = null
 
     /*
      * Separate network and AI threads.
@@ -147,10 +178,7 @@ class MainActivity : AppCompatActivity() {
                 R.id.overlayView
             )
 
-        detector =
-            ObjectDetectorHelper(
-                this
-            )
+        configurePresentationUi()
 
         experimentLogger =
             ExperimentLogger(
@@ -171,8 +199,30 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun startExperiment() {
-
+        val ip = ipInput.text.toString().trim()
+        if (ip.isBlank() || ip.contains("://") || ip.contains("/") || ip.contains(":") ||
+            ip.any { it.isWhitespace() }) {
+            ipInput.error = "Enter the glasses' IP only, without http:// or a port"
+            ipInput.requestFocus()
+            return
+        }
+        getSharedPreferences("receiver_display", MODE_PRIVATE).edit()
+            .putString("ip", ip)
+            .putString("run_name", runNameInput.text.toString().trim())
+            .apply()
+        sessionId += 1L
         running = true
+        receivedFirstDisplayFrame = false
+        hasStreamProblem = false
+        streamImage.setImageDrawable(null)
+        overlayView.clear()
+        presentationNotice.text = "Connecting to glasses…"
+        presentationNotice.visibility = View.VISIBLE
+        window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        ipInput.isEnabled = false
+        runNameInput.isEnabled = false
+        fullscreenButton.visibility = View.VISIBLE
+        setPresentationMode(true)
 
         receivedFrames.set(0)
         processedFrames.set(0)
@@ -221,11 +271,6 @@ class MainActivity : AppCompatActivity() {
         statusText.text =
             "Part D latest-frame MJPEG running..."
 
-        val ip =
-            ipInput.text
-                .toString()
-                .trim()
-
         startNetworkThread(ip)
 
         startProcessingThread()
@@ -253,6 +298,14 @@ class MainActivity : AppCompatActivity() {
             "Experiment stopped"
 
         overlayView.clear()
+        streamImage.setImageDrawable(null)
+        receivedFirstDisplayFrame = false
+        window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        ipInput.isEnabled = true
+        runNameInput.isEnabled = true
+        fullscreenButton.visibility = View.GONE
+        presentationNotice.visibility = View.GONE
+        setPresentationMode(false)
     }
 
     /*
@@ -274,12 +327,14 @@ class MainActivity : AppCompatActivity() {
         val streamUrl =
             "http://$ip:8080/stream.mjpg"
 
+        val networkSession = sessionId
         networkExecutor.execute {
+            if (!running || sessionId != networkSession) return@execute
 
             var streamReader:
                     MjpegStreamReader? = null
 
-            while (running) {
+            while (running && sessionId == networkSession) {
 
                 val receiveStart =
                     SystemClock.elapsedRealtime()
@@ -312,6 +367,7 @@ class MainActivity : AppCompatActivity() {
                     val imageBytes =
                         streamReader.readFrame()
 
+                    if (!running || sessionId != networkSession) break
                     val receivedAt =
                         SystemClock.elapsedRealtime()
 
@@ -355,7 +411,7 @@ class MainActivity : AppCompatActivity() {
 
                 } catch (e: Exception) {
 
-                    if (!running) {
+                    if (!running || sessionId != networkSession) {
                         break
                     }
 
@@ -423,10 +479,11 @@ class MainActivity : AppCompatActivity() {
                     )
 
                     mainHandler.post {
-
-                        statusText.text =
-                            "Stream error: ${e.message} | " +
-                                    "Reconnects: $reconnects"
+                        if (!running || sessionId != networkSession) return@post
+                        statusText.text = "Stream error: ${e.message} | Reconnects: $reconnects"
+                        hasStreamProblem = true
+                        presentationNotice.text = "Connection lost. Reconnecting…"
+                        presentationNotice.visibility = if (presentationMode) View.VISIBLE else View.GONE
                     }
 
                     /*
@@ -464,10 +521,25 @@ class MainActivity : AppCompatActivity() {
      * Processes only the newest frame currently available.
      */
     private fun startProcessingThread() {
-
+        val processingSession = sessionId
         processingExecutor.execute {
+            if (!running || sessionId != processingSession) return@execute
 
-            while (running) {
+            val workerDetector = try {
+                detector ?: ObjectDetectorHelper(applicationContext).also {
+                    detector = it
+                }
+            } catch (e: RuntimeException) {
+                mainHandler.post {
+                    if (running && sessionId == processingSession) {
+                        stopExperiment()
+                        statusText.text = "AI initialization error: ${e.message}"
+                    }
+                }
+                return@execute
+            }
+
+            while (running && sessionId == processingSession) {
 
                 /*
                  * Take newest frame and clear slot.
@@ -554,13 +626,15 @@ class MainActivity : AppCompatActivity() {
                         SystemClock.elapsedRealtime()
 
                     val result =
-                        detector.detect(
+                        workerDetector.detect(
                             bitmap
                         )
 
                     val inferenceMs =
                         SystemClock.elapsedRealtime() -
                                 inferenceStart
+                    val detectorBackend = workerDetector.backendLabel
+                    if (!running || sessionId != processingSession) break
 
                     /*
                      * -------------------------
@@ -675,7 +749,10 @@ class MainActivity : AppCompatActivity() {
                      * -------------------------
                      */
                     mainHandler.post {
-
+                        if (!running || sessionId != processingSession) return@post
+                        receivedFirstDisplayFrame = true
+                        hasStreamProblem = false
+                        presentationNotice.visibility = View.GONE
                         streamImage.setImageBitmap(
                             bitmap
                         )
@@ -690,20 +767,19 @@ class MainActivity : AppCompatActivity() {
                             "Processed: $processedFrameNumber | " +
                                     "Received: ${receivedFrames.get()} | " +
                                     "Dropped: ${droppedFrames.get()} | " +
-                                    "AI: $inferenceMs ms | " +
+                                    "AI ($detectorBackend): $inferenceMs ms | " +
                                     "Age: $frameAgeMs ms"
                     }
 
                 } catch (e: Exception) {
 
-                    if (!running) {
-                        break
-                    }
-
+                    if (!running || sessionId != processingSession) break
                     mainHandler.post {
-
-                        statusText.text =
-                            "Processing error: ${e.message}"
+                        if (!running || sessionId != processingSession) return@post
+                        statusText.text = "Processing error: ${e.message}"
+                        hasStreamProblem = true
+                        presentationNotice.text = "Detection error. Tap the video for controls."
+                        presentationNotice.visibility = if (presentationMode) View.VISIBLE else View.GONE
                     }
                 }
             }
@@ -775,9 +851,191 @@ class MainActivity : AppCompatActivity() {
         )
     }
 
+    // Presentation mode only changes the UI: frame selection and CSV fields
+    // stay the same, and GPU operations remain on processingExecutor.
+    private fun configurePresentationUi() {
+        receiverRoot = findViewById(R.id.receiverRoot)
+        captureStage = findViewById(R.id.captureStage)
+        setupScreen = findViewById(R.id.setupScreen)
+        setupPanel = findViewById(R.id.setupPanel)
+        setupHeading = findViewById(R.id.setupHeading)
+        presentationControls = findViewById(R.id.presentationControls)
+        presentationNotice = findViewById(R.id.presentationNotice)
+        fullscreenButton = findViewById(R.id.fullscreenButton)
+        fillButton = findViewById(R.id.fillButton)
+
+        val preferences = getSharedPreferences("receiver_display", MODE_PRIVATE)
+        ipInput.setText(preferences.getString("ip", ""))
+        runNameInput.setText(preferences.getString("run_name", "class_demo"))
+        fillScreen = preferences.getBoolean("fill_screen", false)
+        applyImageFit()
+
+        WindowCompat.setDecorFitsSystemWindows(window, false)
+        WindowCompat.getInsetsController(window, window.decorView).apply {
+            isAppearanceLightStatusBars = false
+            isAppearanceLightNavigationBars = false
+        }
+        ViewCompat.setOnApplyWindowInsetsListener(receiverRoot) { view, insets ->
+            val safe = insets.getInsets(
+                WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout()
+            )
+            val keyboardHeight =
+                insets.getInsets(WindowInsetsCompat.Type.ime()).bottom
+
+            if (presentationMode) {
+                view.setPadding(0, 0, 0, 0)
+            } else {
+                view.setPadding(
+                    safe.left,
+                    safe.top,
+                    safe.right,
+                    maxOf(safe.bottom, keyboardHeight)
+                )
+
+                // Hide the heading to give the input card more room.
+                val landscape =
+                    resources.configuration.orientation ==
+                            Configuration.ORIENTATION_LANDSCAPE
+
+                setupHeading.visibility =
+                    if (keyboardHeight > 0 || landscape) View.GONE
+                    else View.VISIBLE
+
+                // Scroll the focused input into view on smaller screens.
+                if (keyboardHeight > 0) {
+                    val focusedInput = currentFocus as? EditText
+                    focusedInput?.post {
+                        if (focusedInput.hasFocus()) {
+                            focusedInput.requestRectangleOnScreen(
+                                android.graphics.Rect(
+                                    0, 0,
+                                    focusedInput.width,
+                                    focusedInput.height
+                                ),
+                                true
+                            )
+                        }
+                    }
+                }
+            }
+
+
+            val controlInsets = insets.getInsetsIgnoringVisibility(
+                WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout()
+            )
+            presentationControls.setPadding(
+                dp(12) + controlInsets.left, dp(12),
+                dp(12) + controlInsets.right, dp(12) + controlInsets.bottom
+            )
+            insets
+        }
+        fullscreenButton.setOnClickListener { if (running) setPresentationMode(true) }
+        findViewById<Button>(R.id.showControlsButton).setOnClickListener {
+            setPresentationMode(false)
+        }
+        findViewById<Button>(R.id.stopPresentationButton).setOnClickListener {
+            stopExperiment()
+        }
+        fillButton.setOnClickListener {
+            fillScreen = !fillScreen
+            preferences.edit().putBoolean("fill_screen", fillScreen).apply()
+            applyImageFit()
+            scheduleControlsHide()
+        }
+        captureStage.setOnClickListener {
+            if (presentationMode) {
+                val show = presentationControls.visibility != View.VISIBLE
+                presentationControls.visibility = if (show) View.VISIBLE else View.GONE
+                mainHandler.removeCallbacks(hidePresentationControls)
+                if (show) scheduleControlsHide()
+            }
+        }
+        onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
+            override fun handleOnBackPressed() {
+                when {
+                    presentationMode -> setPresentationMode(false)
+                    running -> stopExperiment()
+                    else -> {
+                        isEnabled = false
+                        onBackPressedDispatcher.onBackPressed()
+                    }
+                }
+            }
+        })
+        resizeSetupPanel()
+        ViewCompat.requestApplyInsets(receiverRoot)
+    }
+
+    private fun dp(value: Int): Int = (value * resources.displayMetrics.density).toInt()
+
+    private fun applyImageFit() {
+        streamImage.scaleType = if (fillScreen) ImageView.ScaleType.CENTER_CROP
+        else ImageView.ScaleType.FIT_CENTER
+        overlayView.setFillScreen(fillScreen)
+        fillButton.text = if (fillScreen) "Fit whole frame" else "Fill screen"
+    }
+
+    private fun scheduleControlsHide() {
+        mainHandler.removeCallbacks(hidePresentationControls)
+        mainHandler.postDelayed(hidePresentationControls, 4000L)
+    }
+
+    private fun setPresentationMode(enabled: Boolean) {
+        presentationMode = enabled
+        mainHandler.removeCallbacks(hidePresentationControls)
+        setupScreen.visibility = if (enabled) View.GONE else View.VISIBLE
+        presentationControls.visibility = View.GONE
+        presentationNotice.visibility = if (enabled && (!receivedFirstDisplayFrame || hasStreamProblem))
+            View.VISIBLE else View.GONE
+        val controller = WindowCompat.getInsetsController(window, window.decorView)
+        if (enabled) {
+            currentFocus?.clearFocus()
+            controller.hide(WindowInsetsCompat.Type.ime())
+            supportActionBar?.hide()
+            controller.systemBarsBehavior =
+                WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+            controller.hide(WindowInsetsCompat.Type.systemBars())
+            if (!helpShown) {
+                Toast.makeText(this, "Tap video for controls. Back returns to settings.",
+                    Toast.LENGTH_LONG).show()
+                helpShown = true
+            }
+        } else {
+            controller.show(WindowInsetsCompat.Type.systemBars())
+        }
+        ViewCompat.requestApplyInsets(receiverRoot)
+    }
+
+    private fun resizeSetupPanel() {
+        val landscape = resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
+        setupHeading.visibility = if (landscape) View.GONE else View.VISIBLE
+        val params = setupPanel.layoutParams as FrameLayout.LayoutParams
+        val available = resources.displayMetrics.widthPixels - dp(40)
+        params.width = if (landscape) minOf(dp(380), available)
+        else minOf(dp(560), available)
+        params.gravity = if (landscape) Gravity.CENTER else Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL
+        setupPanel.layoutParams = params
+    }
+
+    override fun onConfigurationChanged(newConfig: Configuration) {
+        super.onConfigurationChanged(newConfig)
+        resizeSetupPanel()
+        ViewCompat.requestApplyInsets(receiverRoot)
+    }
+
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        if (hasFocus && presentationMode) {
+            WindowCompat.getInsetsController(window, window.decorView)
+                .hide(WindowInsetsCompat.Type.systemBars())
+        }
+    }
+
     override fun onDestroy() {
 
         running = false
+        mainHandler.removeCallbacksAndMessages(null)
+        window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
 
         activeStreamReader?.close()
 
@@ -787,11 +1045,14 @@ class MainActivity : AppCompatActivity() {
 
         experimentLogger.stop()
 
-        detector.close()
-
         networkExecutor.shutdownNow()
 
-        processingExecutor.shutdownNow()
+        // Let in-flight detection finish, then release it on its owner thread.
+        processingExecutor.execute {
+            detector?.close()
+            detector = null
+        }
+        processingExecutor.shutdown()
 
         super.onDestroy()
     }

@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="demo_eyebrow">SMART GLASS VISION</string>
+    <string name="demo_intro">Live camera. On-device object detection.</string>
+    <string name="demo_setup_title">Connect your glasses</string>
+    <string name="demo_ip_label">GLASSES IP ADDRESS</string>
+    <string name="demo_ip_hint">e.g. 192.168.43.120</string>
+    <string name="demo_run_label">SESSION NAME</string>
+    <string name="demo_run_hint">class_demo</string>
+    <string name="demo_start">Start AI Detection</string>
+    <string name="demo_status">Ready to connect</string>
+    <string name="demo_setup_hint">Start detection to open the camera full screen.</string>
+    <string name="demo_fullscreen">Return to full screen</string>
+    <string name="demo_fill">Fill screen</string>
+    <string name="demo_controls">Controls</string>
+    <string name="demo_stop">Stop</string>
+    <string name="demo_capture_description">Camera stream with object-detection boxes. Tap for presentation controls.</string>
+</resources>
