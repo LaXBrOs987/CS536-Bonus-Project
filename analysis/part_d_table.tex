@@ -1,0 +1,26 @@
+% Requires \usepackage{booktabs} and \usepackage{graphicx}.
+% Run-to-filename mapping is in part_d_summary.csv.
+\begin{table}[t]
+\caption{Part D results for the selected runs. Combined rates pool counts and duration; combined latencies pool successful frames.}
+\label{tab:partd_validation}
+\centering
+\resizebox{\columnwidth}{!}{%
+\begin{tabular}{lrrrrrr}
+\toprule
+Run & Proc. FPS & Recv. FPS & AI (ms) & Frame age (ms) & Stalls & DL (Mbps) \\
+\midrule
+Run 1 & 7.80 & 29.39 & 120.56 & 151.67 & 0 & 8.058 \\
+Run 2 & 7.30 & 25.09 & 122.08 & 156.83 & 0 & 7.714 \\
+Run 3 & 7.55 & 27.29 & 123.22 & 154.57 & 0 & 8.132 \\
+Run 4 & 7.55 & 27.98 & 124.81 & 157.16 & 0 & 8.144 \\
+Run 5 & 7.74 & 28.91 & 121.67 & 154.14 & 0 & 8.880 \\
+Run 6 & 8.01 & 29.76 & 117.69 & 149.77 & 0 & 8.787 \\
+Run 7 & 7.69 & 28.08 & 122.26 & 154.96 & 0 & 7.929 \\
+Run 8 & 7.51 & 27.66 & 124.46 & 157.07 & 0 & 8.169 \\
+Run 9 & 7.74 & 28.55 & 121.32 & 152.98 & 0 & 8.248 \\
+Run 10 & 7.67 & 26.81 & 120.81 & 155.48 & 0 & 7.670 \\
+\midrule
+Combined & 7.67 & 28.03 & 121.91 & 154.44 & 0 & 8.200 \\
+\bottomrule
+\end{tabular}}
+\end{table}

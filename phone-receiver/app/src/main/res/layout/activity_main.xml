@@ -1,69 +1,246 @@
 <?xml version="1.0" encoding="utf-8"?>
-
-<LinearLayout
-    xmlns:android="http://schemas.android.com/apk/res/android"
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/receiverRoot"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:orientation="vertical"
-    android:padding="16dp">
-
-    <TextView
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:text="CS536 Smart Glass AI"
-        android:textSize="24sp"
-        android:textStyle="bold" />
-
-    <EditText
-        android:id="@+id/ipInput"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="12dp"
-        android:hint="Air2 IP Address"
-        android:inputType="text"
-        android:text="172.20.10.2" />
-
-    <EditText
-        android:id="@+id/runNameInput"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="8dp"
-        android:hint="Run name"
-        android:inputType="text"
-        android:text="test_run01" />
-
-    <Button
-        android:id="@+id/connectButton"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:text="Start AI Detection" />
-
-    <TextView
-        android:id="@+id/statusText"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="8dp"
-        android:text="Disconnected" />
+    android:background="@drawable/demo_background">
 
     <FrameLayout
+        android:id="@+id/captureStage"
         android:layout_width="match_parent"
-        android:layout_height="0dp"
-        android:layout_weight="1"
-        android:layout_marginTop="12dp">
-
+        android:layout_height="match_parent"
+        android:background="#000000"
+        android:clickable="true"
+        android:focusable="true"
+        android:contentDescription="@string/demo_capture_description">
         <ImageView
             android:id="@+id/streamImage"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
-            android:background="#000000"
-            android:scaleType="fitXY"
-            android:contentDescription="Smart glasses camera stream" />
-
+            android:scaleType="fitCenter"
+            android:importantForAccessibility="no" />
         <com.example.cs536.OverlayView
             android:id="@+id/overlayView"
             android:layout_width="match_parent"
-            android:layout_height="match_parent" />
-
+            android:layout_height="match_parent"
+            android:importantForAccessibility="no" />
     </FrameLayout>
 
-</LinearLayout>
+    <FrameLayout
+        android:id="@+id/setupScreen"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:clickable="true"
+        android:background="@drawable/demo_background">
+        <LinearLayout
+            android:id="@+id/setupHeading"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_margin="24dp"
+            android:orientation="vertical">
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/demo_eyebrow"
+                android:textColor="#45E3C2"
+                android:letterSpacing="0.14"
+                android:textSize="11sp"
+                android:textStyle="bold" />
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="10dp"
+                android:text="@string/app_name"
+                android:textColor="#F6F9FC"
+                android:textSize="28sp"
+                android:textStyle="bold" />
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:text="@string/demo_intro"
+                android:textColor="#A9BDD0"
+                android:textSize="14sp" />
+        </LinearLayout>
+
+        <ScrollView
+            android:id="@+id/setupPanel"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_gravity="bottom|center_horizontal"
+            android:layout_margin="20dp"
+            android:background="@drawable/demo_card"
+            android:elevation="6dp"
+            android:clipToPadding="false"
+            android:scrollbars="vertical">
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="20dp">
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="@string/demo_setup_title"
+                    android:textColor="#F6F9FC"
+                    android:textSize="21sp"
+                    android:textStyle="bold" />
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="16dp"
+                    android:labelFor="@id/ipInput"
+                    android:text="@string/demo_ip_label"
+                    android:textColor="#A9BDD0"
+                    android:textSize="11sp"
+                    android:letterSpacing="0.08" />
+                <EditText
+                    android:id="@+id/ipInput"
+                    android:layout_width="match_parent"
+                    android:layout_height="52dp"
+                    android:layout_marginTop="6dp"
+                    android:background="@drawable/demo_input"
+                    android:hint="@string/demo_ip_hint"
+                    android:inputType="textUri"
+                    android:imeOptions="actionNext"
+                    android:paddingStart="14dp"
+                    android:paddingEnd="14dp"
+                    android:selectAllOnFocus="true"
+                    android:singleLine="true"
+                    android:textColor="#F6F9FC"
+                    android:textColorHint="#8297AD"
+                    android:textSize="16sp"
+                    android:autofillHints="" />
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="14dp"
+                    android:labelFor="@id/runNameInput"
+                    android:text="@string/demo_run_label"
+                    android:textColor="#A9BDD0"
+                    android:textSize="11sp"
+                    android:letterSpacing="0.08" />
+                <EditText
+                    android:id="@+id/runNameInput"
+                    android:layout_width="match_parent"
+                    android:layout_height="52dp"
+                    android:layout_marginTop="6dp"
+                    android:background="@drawable/demo_input"
+                    android:hint="@string/demo_run_hint"
+                    android:inputType="text"
+                    android:imeOptions="actionDone"
+                    android:paddingStart="14dp"
+                    android:paddingEnd="14dp"
+                    android:selectAllOnFocus="true"
+                    android:singleLine="true"
+                    android:textColor="#F6F9FC"
+                    android:textColorHint="#8297AD"
+                    android:textSize="16sp"
+                    android:autofillHints="" />
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/connectButton"
+                    android:layout_width="match_parent"
+                    android:layout_height="56dp"
+                    android:layout_marginTop="16dp"
+                    android:backgroundTint="#45E3C2"
+                    android:text="@string/demo_start"
+                    android:textAllCaps="false"
+                    android:textColor="#082222"
+                    android:textSize="16sp"
+                    android:textStyle="bold"
+                    app:cornerRadius="14dp" />
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/fullscreenButton"
+                    android:layout_width="match_parent"
+                    android:layout_height="52dp"
+                    android:backgroundTint="#263F54"
+                    android:text="@string/demo_fullscreen"
+                    android:textColor="#FFFFFF"
+                    android:textAllCaps="false"
+                    android:visibility="gone"
+                    app:cornerRadius="14dp" />
+                <TextView
+                    android:id="@+id/statusText"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="12dp"
+                    android:minHeight="36dp"
+                    android:maxLines="5"
+                    android:text="@string/demo_status"
+                    android:textColor="#C4D3E2"
+                    android:textSize="12sp" />
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="6dp"
+                    android:text="@string/demo_setup_hint"
+                    android:textColor="#8297AD"
+                    android:textSize="12sp" />
+            </LinearLayout>
+        </ScrollView>
+    </FrameLayout>
+
+    <TextView
+        android:id="@+id/presentationNotice"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center"
+        android:layout_margin="20dp"
+        android:background="@drawable/demo_notice"
+        android:padding="18dp"
+        android:gravity="center"
+        android:textColor="#FFFFFF"
+        android:textSize="16sp"
+        android:visibility="gone" />
+
+    <LinearLayout
+        android:id="@+id/presentationControls"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom"
+        android:background="#E0091420"
+        android:orientation="horizontal"
+        android:gravity="center"
+        android:padding="12dp"
+        android:visibility="gone">
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/fillButton"
+            android:layout_width="0dp"
+            android:layout_height="52dp"
+            android:layout_weight="1"
+            android:minWidth="0dp"
+            android:paddingStart="4dp"
+            android:paddingEnd="4dp"
+            android:backgroundTint="#263F54"
+            android:text="@string/demo_fill"
+            android:textColor="#FFFFFF"
+            android:textSize="12sp"
+            android:textAllCaps="false"
+            app:cornerRadius="14dp" />
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/showControlsButton"
+            android:layout_width="0dp"
+            android:layout_height="52dp"
+            android:layout_weight="1"
+            android:layout_marginStart="8dp"
+            android:minWidth="0dp"
+            android:backgroundTint="#263F54"
+            android:text="@string/demo_controls"
+            android:textColor="#FFFFFF"
+            android:textAllCaps="false"
+            app:cornerRadius="14dp" />
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/stopPresentationButton"
+            android:layout_width="0dp"
+            android:layout_height="52dp"
+            android:layout_weight="1"
+            android:layout_marginStart="8dp"
+            android:minWidth="0dp"
+            android:backgroundTint="#C44858"
+            android:text="@string/demo_stop"
+            android:textColor="#FFFFFF"
+            android:textAllCaps="false"
+            app:cornerRadius="14dp" />
+    </LinearLayout>
+</FrameLayout>
